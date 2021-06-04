@@ -54,6 +54,7 @@ sip_code_t sip_codes[] = {
     { SIP_METHOD_NOTIFY,    "NOTIFY" },
     { SIP_METHOD_OPTIONS,   "OPTIONS" },
     { SIP_METHOD_PUBLISH,   "PUBLISH" },
+    { SIP_METHOD_KDMQ,      "KDMQ" },
     { SIP_METHOD_MESSAGE,   "MESSAGE" },
     { SIP_METHOD_CANCEL,    "CANCEL" },
     { SIP_METHOD_BYE,       "BYE" },
@@ -170,7 +171,7 @@ sip_init(int limit, int only_calls, int no_incomplete)
 
     // Initialize payload parsing regexp
     match_flags = REG_EXTENDED | REG_ICASE | REG_NEWLINE;
-    regcomp(&calls.reg_method, "^([a-zA-Z]+) [a-zA-Z]+:.+ SIP/2.0[ ]*\r", match_flags & ~REG_NEWLINE);
+    regcomp(&calls.reg_method, "^([a-zA-Z]+) [a-zA-Z]+:.* SIP/2.0[ ]*\r", match_flags & ~REG_NEWLINE);
     regcomp(&calls.reg_callid, "^(Call-ID|i):[ ]*([^ ]+)[ ]*\r$", match_flags);
     setting = setting_get_value(SETTING_SIP_HEADER_X_CID);
     reg_rule_len = strlen(setting) + 22;
@@ -261,7 +262,7 @@ sip_validate_packet(packet_t *packet)
 {
     uint32_t plen = packet_payloadlen(packet);
     u_char payload[MAX_SIP_PAYLOAD];
-    regmatch_t pmatch[3];
+    regmatch_t pmatch[4];
     char cl_header[10];
     int content_len;
     int bodylen;
@@ -327,17 +328,12 @@ sip_check_packet(packet_t *packet)
     sip_msg_t *msg;
     sip_call_t *call;
     char callid[1024], xcallid[1024];
-    address_t src, dst;
     u_char payload[MAX_SIP_PAYLOAD];
     bool newcall = false;
 
     // Max SIP payload allowed
     if (packet->payload_len > MAX_SIP_PAYLOAD)
         return NULL;
-
-    // Get Addresses from packet
-    src = packet->src;
-    dst = packet->dst;
 
     // Initialize local variables
     memset(callid, 0, sizeof(callid));
@@ -653,8 +649,9 @@ sip_parse_msg_media(sip_msg_t *msg, const u_char *payload)
 
     address_t dst, src = { };
     rtp_stream_t *rtp_stream = NULL, *rtcp_stream = NULL, *msg_rtp_stream = NULL;
-    char media_type[MEDIATYPELEN] = { };
+    char media_type[MEDIATYPELEN + 1] = { };
     char media_format[30] = { };
+    char address[ADDRESSLEN + 1] = { };
     uint32_t media_fmt_pref;
     uint32_t media_fmt_code;
     sdp_media_t *media = NULL;
@@ -673,8 +670,8 @@ sip_parse_msg_media(sip_msg_t *msg, const u_char *payload)
     while ((line = strsep(&payload2, "\r\n")) != NULL) {
         // Check if we have a media string
         if (!strncmp(line, "m=", 2)) {
-            if (sscanf(line, "m=%s %hu RTP/%*s %u", media_type, &dst.port, &media_fmt_pref) == 3
-            ||  sscanf(line, "m=%s %hu UDP/%*s %u", media_type, &dst.port, &media_fmt_pref) == 3) {
+            if (sscanf(line, "m=%" STRINGIFY(MEDIATYPELEN) "s %hu RTP/%*s %u", media_type, &dst.port, &media_fmt_pref) == 3
+            ||  sscanf(line, "m=%" STRINGIFY(MEDIATYPELEN) "s %hu UDP/%*s %u", media_type, &dst.port, &media_fmt_pref) == 3) {
 
                 // Add streams from previous 'm=' line to the call
                 ADD_STREAM(msg_rtp_stream);
@@ -712,16 +709,19 @@ sip_parse_msg_media(sip_msg_t *msg, const u_char *payload)
 
         // Check if we have a connection string
         if (!strncmp(line, "c=", 2)) {
-            if (sscanf(line, "c=IN IP4 %s", dst.ip) && media) {
-                media_set_address(media, dst);
-                strcpy(rtp_stream->dst.ip, dst.ip);
-                strcpy(rtcp_stream->dst.ip, dst.ip);
+            if (sscanf(line, "c=IN IP%*c %" STRINGIFY(ADDRESSLEN) "s", address)) {
+                strncpy(dst.ip, address, ADDRESSLEN - 1);
+                if (media) {
+                    media_set_address(media, dst);
+                    strcpy(rtp_stream->dst.ip, dst.ip);
+                    strcpy(rtcp_stream->dst.ip, dst.ip);
+                }
             }
         }
 
         // Check if we have attribute format string
         if (!strncmp(line, "a=rtpmap:", 9)) {
-            if (media && sscanf(line, "a=rtpmap:%u %30[^ ]", &media_fmt_code, media_format)) {
+            if (media && sscanf(line, "a=rtpmap:%u %29[^ ]", &media_fmt_code, media_format)) {
                 media_add_format(media, media_fmt_code, media_format);
             }
         }
@@ -824,7 +824,7 @@ sip_set_match_expression(const char *expr, int insensitive, int invert)
 #ifdef WITH_PCRE
     const char *re_err = NULL;
     int32_t err_offset;
-    int32_t pflags = PCRE_UNGREEDY;
+    int32_t pflags = PCRE_UNGREEDY | PCRE_DOTALL;
 
     if (insensitive)
         pflags |= PCRE_CASELESS;
@@ -929,9 +929,7 @@ sip_get_msg_header(sip_msg_t *msg, char *out)
     // Get msg header
     if (setting_enabled(SETTING_DISPLAY_ALIAS)) {
         sprintf(out, "%s %s %s -> %s", date, time, get_alias_value(from_addr), get_alias_value(to_addr));
-    }
-    else
-    {
+    } else {
         sprintf(out, "%s %s %s -> %s", date, time, from_addr, to_addr);
     }
     return out;

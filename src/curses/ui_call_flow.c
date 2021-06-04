@@ -39,6 +39,8 @@
 #include "vector.h"
 #include "option.h"
 
+#define METHOD_MAXLEN 80
+
 /***
  *
  * Some basic ascii art of this panel.
@@ -226,11 +228,6 @@ call_flow_draw(ui_t *ui)
 void
 call_flow_draw_footer(ui_t *ui)
 {
-    call_flow_info_t *info;
-
-    // Get panel information
-    info = call_flow_info(ui);
-
     const char *keybindings[] = {
         key_action_key_str(ACTION_PREV_SCREEN), "Calls List",
         key_action_key_str(ACTION_CONFIRM), "Raw",
@@ -429,7 +426,7 @@ call_flow_draw_message(ui_t *ui, call_flow_arrow_t *arrow, int cline)
     char msg_time[80];
     address_t src;
     address_t dst;
-    char method[80];
+    char method[METHOD_MAXLEN + 1];
     char delta[15] = {};
     int flowh, floww;
     char mediastr[40];
@@ -438,6 +435,9 @@ call_flow_draw_message(ui_t *ui, call_flow_arrow_t *arrow, int cline)
     int color = 0;
     int msglen;
     int aline = cline + 1;
+
+    // Initialize method
+    memset(method, 0, sizeof(method));
 
     // Get panel information
     info = call_flow_info(ui);
@@ -465,33 +465,33 @@ call_flow_draw_message(ui_t *ui, call_flow_arrow_t *arrow, int cline)
     timeval_to_time(msg_get_time(msg), msg_time);
 
     // Get Message method (include extra info)
-    sprintf(method, "%s", msg_method);
+    snprintf(method, METHOD_MAXLEN, "%s", msg_method);
 
     // If message has sdp information
     if (msg_has_sdp(msg) && setting_has_value(SETTING_CF_SDP_INFO, "off")) {
         // Show sdp tag in title
-        sprintf(method, "%s (SDP)", msg_method);
+        snprintf(method, METHOD_MAXLEN, "%s (SDP)", msg_method );
     }
 
     // If message has sdp information
     if (setting_has_value(SETTING_CF_SDP_INFO, "compressed")) {
         // Show sdp tag in title
         if (msg_has_sdp(msg)) {
-            sprintf(method, "%.*s (SDP)", 12, msg_method);
+            snprintf(method, METHOD_MAXLEN, "%.*s (SDP)", 12, msg_method);
         } else {
-            sprintf(method, "%.*s", 17, msg_method);
+            snprintf(method, METHOD_MAXLEN, "%.*s", 17, msg_method);
         }
     }
 
     if (msg_has_sdp(msg) && setting_has_value(SETTING_CF_SDP_INFO, "first")) {
-        sprintf(method, "%.3s (%s:%u)",
-                msg_method,
-                media->address.ip,
-                media->address.port);
+        snprintf(method, METHOD_MAXLEN, "%.3s (%s:%u)",
+		 msg_method,
+		 media->address.ip,
+		 media->address.port);
     }
 
     if (msg_has_sdp(msg) && setting_has_value(SETTING_CF_SDP_INFO, "full")) {
-        sprintf(method, "%.3s (%s)", msg_method, media->address.ip);
+        snprintf(method, METHOD_MAXLEN, "%.3s (%s)", msg_method, media->address.ip);
     }
 
     // Draw message type or status and line
@@ -674,7 +674,6 @@ call_flow_draw_rtp_stream(ui_t *ui, call_flow_arrow_t *arrow, int cline)
     WINDOW *win;
     char text[50], time[20];
     int height, width;
-    const char *callid;
     rtp_stream_t *stream = arrow->item;
     sip_msg_t *msg;
     sip_call_t *call;
@@ -702,7 +701,6 @@ call_flow_draw_rtp_stream(ui_t *ui, call_flow_arrow_t *arrow, int cline)
 
     // Get message data
     call = stream->media->msg->call;
-    callid = call->callid;
 
     /**
      * This logic will try to use the same columns for the stream representation
@@ -881,13 +879,9 @@ call_flow_arrow_t *
 call_flow_arrow_create(ui_t *ui, void *item, int type)
 {
     call_flow_arrow_t *arrow;
-    call_flow_info_t *info;
 
     if ((arrow = call_flow_arrow_find(ui, item)))
         return arrow;
-
-    // Get panel information
-    info = call_flow_info(ui);
 
     // Create a new arrow of the given type
     arrow = malloc(sizeof(call_flow_arrow_t));
@@ -1116,7 +1110,7 @@ call_flow_handle_key(ui_t *ui, int key)
     int raw_width, height, width;
     call_flow_info_t *info = call_flow_info(ui);
     ui_t *next_ui;
-    sip_call_t *call = NULL;
+    sip_call_t *call = NULL, *xcall = NULL;
     int rnpag_steps = setting_get_intvalue(SETTING_CF_SCROLLSTEP);
     int action = -1;
 
@@ -1159,8 +1153,17 @@ call_flow_handle_key(ui_t *ui, int key)
                 werase(ui->win);
                 if (call_group_count(info->group) == 1) {
                     call = vector_first(info->group->calls);
-                    call_group_add_calls(info->group, call->xcalls);
-                    info->group->callid = call->callid;
+                    if (call->xcallid != NULL && strlen(call->xcallid)) {
+                        if ((xcall = sip_find_by_callid(call->xcallid))) {
+                            call_group_del(info->group, call);
+                            call_group_add(info->group, xcall);
+                            call_group_add_calls(info->group, xcall->xcalls);
+                            info->group->callid = xcall->callid;
+                        }
+                    } else {
+                        call_group_add_calls(info->group, call->xcalls);
+                        info->group->callid = call->callid;
+                    }
                 } else {
                     call = vector_first(info->group->calls);
                     vector_clear(info->group->calls);

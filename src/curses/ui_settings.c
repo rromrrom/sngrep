@@ -97,7 +97,7 @@ settings_create(ui_t *ui)
 {
     int i, j, line;
     settings_info_t *info;
-    FIELD *entry, *label;
+    FIELD *entry = NULL, *label;
     int field = 0;
 
     // Cerate a new window for the panel and form
@@ -218,7 +218,6 @@ settings_info(ui_t *ui)
 int
 settings_draw(ui_t *ui)
 {
-    int field_idx;
     int i;
     int cury, curx;
 
@@ -228,9 +227,6 @@ settings_draw(ui_t *ui)
 
     // Store cursor position
     getyx(ui->win, cury, curx);
-
-    // Get current field id
-    field_idx = field_index(current_field(info->form));
 
     // Print category headers
     int colpos = 2;

@@ -60,7 +60,7 @@ init_options(int no_config)
     }
 
     // Initialize settings
-    setting_set_value(SETTING_FILTER_METHODS, "REGISTER,INVITE,SUBSCRIBE,NOTIFY,OPTIONS,PUBLISH,MESSAGE,INFO,REFER,UPDATE");
+    setting_set_value(SETTING_FILTER_METHODS, "REGISTER,INVITE,SUBSCRIBE,NOTIFY,OPTIONS,PUBLISH,MESSAGE,INFO,REFER,UPDATE,KDMQ");
 
     // Add Call list column options
     set_option_value("cl.column0", "index");
@@ -121,7 +121,7 @@ read_options(const char *fname)
             continue;
 
         // Get configuration option from setting line
-        if (sscanf(line, "%s %s %[^\t\n]", type, option, value) == 3) {
+        if (sscanf(line, "%19s %49s %49[^\t\n]", type, option, value) == 3) {
             if (!strcasecmp(type, "set")) {
                 if ((id = setting_id(option)) >= 0) {
                     setting_set_value(id, value);

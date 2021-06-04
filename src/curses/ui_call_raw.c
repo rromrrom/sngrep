@@ -49,7 +49,7 @@ ui_t ui_call_raw = {
     .handle_key = call_raw_handle_key
 };
 
-void
+    void
 call_raw_create(ui_t *ui)
 {
     // Create a new panel to fill all the screen
@@ -67,7 +67,7 @@ call_raw_create(ui_t *ui)
     info->scroll = 0;
 }
 
-void
+    void
 call_raw_destroy(ui_t *ui)
 {
     call_raw_info_t *info;
@@ -80,13 +80,13 @@ call_raw_destroy(ui_t *ui)
     ui_panel_destroy(ui);
 }
 
-call_raw_info_t *
+    call_raw_info_t *
 call_raw_info(ui_t *ui)
 {
     return (call_raw_info_t*) panel_userptr(ui->panel);
 }
 
-bool
+    bool
 call_raw_redraw(ui_t *ui)
 {
     // Get panel information
@@ -97,7 +97,7 @@ call_raw_redraw(ui_t *ui)
 
 }
 
-int
+    int
 call_raw_draw(ui_t *ui)
 {
     call_raw_info_t *info;
@@ -121,7 +121,7 @@ call_raw_draw(ui_t *ui)
     return 0;
 }
 
-int
+    int
 call_raw_print_msg(ui_t *ui, sip_msg_t *msg)
 {
     call_raw_info_t *info;
@@ -203,7 +203,7 @@ call_raw_print_msg(ui_t *ui, sip_msg_t *msg)
     return 0;
 }
 
-int
+    int
 call_raw_handle_key(ui_t *ui, int key)
 {
     call_raw_info_t *info;
@@ -281,7 +281,7 @@ call_raw_handle_key(ui_t *ui, int key)
                 } else {
                     call_raw_set_msg(info->msg);
                 }
- 		break;
+                break;
             default:
                 // Parse next action
                 continue;

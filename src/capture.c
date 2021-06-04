@@ -54,9 +54,10 @@ capture_config_t capture_cfg =
 { 0 };
 
 void
-capture_init(size_t limit, bool rtp_capture, bool rotate)
+capture_init(size_t limit, bool rtp_capture, bool rotate, size_t pcap_buffer_size)
 {
     capture_cfg.limit = limit;
+    capture_cfg.pcap_buffer_size = pcap_buffer_size;
     capture_cfg.rtp_capture = rtp_capture;
     capture_cfg.rotate = rotate;
     capture_cfg.paused = 0;
@@ -123,11 +124,37 @@ capture_online(const char *dev, const char *outfile)
     }
 
     // Open capture device
-    capinfo->handle = pcap_open_live(dev, MAXIMUM_SNAPLEN, 1, 1000, errbuf);
+    capinfo->handle = pcap_create(dev, errbuf);
     if (capinfo->handle == NULL) {
         fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
         return 2;
     }
+
+    if (pcap_set_snaplen(capinfo->handle, MAXIMUM_SNAPLEN) != 0) {
+        fprintf(stderr, "Error setting snaplen on %s: %s\n", dev, pcap_geterr(capinfo->handle));
+        return 2;
+    }
+
+    if (pcap_set_promisc(capinfo->handle, 1) != 0) {
+        fprintf(stderr, "Error setting promiscous mode on %s: %s\n", dev, pcap_geterr(capinfo->handle));
+        return 2;
+    }
+
+    if (pcap_set_timeout(capinfo->handle, 1000) != 0) {
+        fprintf(stderr, "Error setting capture timeout on %s: %s\n", dev, pcap_geterr(capinfo->handle));
+        return 2;
+    }
+
+    if (pcap_set_buffer_size(capinfo->handle, capture_cfg.pcap_buffer_size * 1024 * 1024) != 0) {
+        fprintf(stderr, "Error setting capture buffer size on %s: %s\n", dev, pcap_geterr(capinfo->handle));
+        return 2;
+    }
+
+    if (pcap_activate(capinfo->handle) < 0) {
+        fprintf(stderr, "Couldn't activate capture: %s\n", pcap_geterr(capinfo->handle));
+        return 2;
+    }
+
 
     // Store capture device
     capinfo->device = dev;
@@ -248,6 +275,10 @@ parse_packet(u_char *info, const struct pcap_pkthdr *header, const u_char *packe
     uint32_t size_payload =  size_capture - capinfo->link_hl;
     // Captured packet info
     packet_t *pkt;
+#ifdef USE_EEP
+    // Captured HEP3 packet info
+    packet_t *pkt_hep3;
+#endif
 
     // Ignore packets while capture is paused
     if (capture_paused())
@@ -291,10 +322,27 @@ parse_packet(u_char *info, const struct pcap_pkthdr *header, const u_char *packe
         // Remove TCP Header from payload
         payload = (u_char *) (udp) + udp_off;
 
-        // Complete packet with Transport information
-        packet_set_type(pkt, PACKET_SIP_UDP);
-        packet_set_payload(pkt, payload, size_payload);
+#ifdef USE_EEP
+        // check for HEP3 header and parse payload
+        if(setting_enabled(SETTING_CAPTURE_EEP)) {
+            pkt_hep3 = capture_eep_receive_v3(payload, size_payload);
 
+            if (pkt_hep3) {
+                packet_destroy(pkt);
+                pkt = pkt_hep3;
+            } else {
+                // Complete packet with Transport information
+                packet_set_type(pkt, PACKET_SIP_UDP);
+                packet_set_payload(pkt, payload, size_payload);
+            }
+        } else {
+#endif
+            // Complete packet with Transport information
+            packet_set_type(pkt, PACKET_SIP_UDP);
+            packet_set_payload(pkt, payload, size_payload);
+#ifdef USE_EEP
+        }
+#endif
     } else if (pkt->proto == IPPROTO_TCP) {
         // Get TCP header
         tcp = (struct tcphdr *)((u_char *)(data) + (size_capture - size_payload));
@@ -670,7 +718,6 @@ int
 capture_ws_check_packet(packet_t *packet)
 {
     int ws_off = 0;
-    u_char ws_fin;
     u_char ws_opcode;
     u_char ws_mask;
     uint8_t ws_len;
@@ -710,7 +757,6 @@ capture_ws_check_packet(packet_t *packet)
         return 0;
 
     // Flags && Opcode
-    ws_fin = (*payload & WH_FIN) >> 4;
     ws_opcode = *payload & WH_OPCODE;
     ws_off++;
 

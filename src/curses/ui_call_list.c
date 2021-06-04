@@ -563,7 +563,7 @@ call_list_handle_key(ui_t *ui, int key)
     ui_t *next_ui;
     sip_call_group_t *group;
     int action = -1;
-    sip_call_t *call;
+    sip_call_t *call, *xcall;
     sip_sort_t sort;
 
     // Sanity check, this should not happen
@@ -632,8 +632,17 @@ call_list_handle_key(ui_t *ui, int key)
                 // Add xcall to the group
                 if (action == ACTION_SHOW_FLOW_EX) {
                     call = vector_item(info->dcalls, info->cur_call);
-                    call_group_add_calls(group, call->xcalls);
-                    group->callid = call->callid;
+                    if (call->xcallid != NULL && strlen(call->xcallid)) {
+                        if ((xcall = sip_find_by_callid(call->xcallid))) {
+                            call_group_del(group, call);
+                            call_group_add(group, xcall);
+                            call_group_add_calls(group, xcall->xcalls);
+                            group->callid = xcall->callid;
+                        }
+                    } else {
+                        call_group_add_calls(group, call->xcalls);
+                        group->callid = call->callid;
+                    }
                 }
 
                 if (action == ACTION_SHOW_RAW) {
@@ -746,15 +755,11 @@ call_list_handle_key(ui_t *ui, int key)
 int
 call_list_handle_form_key(ui_t *ui, int key)
 {
-    int field_idx;
     char *dfilter;
     int action = -1;
 
     // Get panel information
     call_list_info_t *info = call_list_info(ui);
-
-    // Get current field id
-    field_idx = field_index(current_field(info->form));
 
     // Check actions for this key
     while ((action = key_find_action(key, action)) != ERR) {
@@ -836,8 +841,7 @@ int
 call_list_handle_menu_key(ui_t *ui, int key)
 {
     MENU *menu;
-    ITEM *current;
-    int current_idx, i;
+    int i;
     int action = -1;
     sip_sort_t sort;
     enum sip_attr_id id;
@@ -846,8 +850,6 @@ call_list_handle_menu_key(ui_t *ui, int key)
     call_list_info_t *info = call_list_info(ui);
 
     menu = info->menu;
-    current = current_item(menu);
-    current_idx = item_index(current);
 
       // Check actions for this key
       while ((action = key_find_action(key, action)) != ERR) {

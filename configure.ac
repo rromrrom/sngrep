@@ -1,5 +1,5 @@
 AC_PREREQ([2.59])
-AC_INIT([sngrep], [1.4.6], [kaian@irontec.com], [sngrep], [http://www.irontec.com/])
+AC_INIT([sngrep], [1.4.9], [kaian@irontec.com], [sngrep], [http://www.irontec.com/])
 AM_INIT_AUTOMAKE([1.9])
 AC_CONFIG_HEADERS([src/config.h])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -55,10 +55,10 @@ AS_IF([test "x$enable_unicode" == "xyes"], [
 	# Ncurses with wide-character support
 	AC_DEFINE([WITH_UNICODE], [], [Compile With Unicode compatibility])
 
-   SNGREP_CHECK_SCRIPT([ncursesw6], [addnwstr], [WITH_UNICODE], "ncursesw6-config",
+   SNGREP_CHECK_SCRIPT([ncursesw], [addnwstr], [WITH_UNICODE], "ncursesw6-config",
     SNGREP_CHECK_SCRIPT([ncursesw], [addnwstr], [WITH_UNICODE], "ncursesw5-config",
      SNGREP_CHECK_SCRIPT([ncurses], [addnwstr], [WITH_UNICODE], "ncurses5-config",
-      SNGREP_CHECK_LIB([ncursesw6], [addnwstr], [WITH_UNICODE],
+      SNGREP_CHECK_LIB([ncursesw], [addnwstr], [WITH_UNICODE],
        SNGREP_CHECK_LIB([ncursesw], [addnwstr], [WITH_UNICODE],
         SNGREP_CHECK_LIB([ncurses], [addnwstr], [WITH_UNICODE],
 	))))))
@@ -73,6 +73,10 @@ AS_IF([test "x$enable_unicode" == "xyes"], [
 
 	AC_CHECK_LIB([menuw], [new_item], [], [
 	    AC_MSG_ERROR([ You need to have ncurses menuw library installed to compile sngrep.])
+	])
+
+	AC_SEARCH_LIBS([keyname], [tinfow], [], [
+	    AC_MSG_ERROR([ You need to have ncurses tinfow library installed to compile sngrep.])
 	])
 	], [
 
@@ -95,6 +99,10 @@ AS_IF([test "x$enable_unicode" == "xyes"], [
 
 	AC_CHECK_LIB([menu], [new_item], [], [
 	    AC_MSG_ERROR([ You need to have ncurses menu library installed to compile sngrep.])
+	])
+
+	AC_SEARCH_LIBS([keyname], [tinfo], [], [
+	    AC_MSG_ERROR([ You need to have ncurses tinfo library installed to compile sngrep.])
 	])
 ])
 

@@ -400,7 +400,7 @@ filter_save_options(ui_t *ui)
 const char*
 filter_field_method(int field_id)
 {
-    int method;
+    int method = 0;
     switch(field_id) {
         case FLD_FILTER_REGISTER:
             method = SIP_METHOD_REGISTER;
@@ -447,8 +447,7 @@ filter_method_from_setting(const char *value)
     // If there's a method filter
     if (methods_len) {
         // Copy value into temporal array
-        memset(methods, 0, sizeof(methods));
-        strncpy(methods, value, methods_len);
+        strncpy(methods, value, sizeof(methods));
 
         // Replace all commas with pippes
         while ((comma = strchr(methods, ',')))

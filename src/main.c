@@ -52,12 +52,12 @@
 void
 usage()
 {
-    printf("Usage: %s [-hVcivNqrD] [-IO pcap_dump] [-d dev] [-l limit]"
+    printf("Usage: %s [-hVcivNqrD] [-IO pcap_dump] [-d dev] [-l limit] [-B buffer]"
 #if defined(WITH_GNUTLS) || defined(WITH_OPENSSL)
            " [-k keyfile]"
 #endif
 #ifdef USE_EEP
-           " [-LH capture_url]"
+           " [-LHE capture_url]"
 #endif
            " [<match expression>] [<bpf filter>]\n\n"
            "    -h --help\t\t This usage\n"
@@ -65,6 +65,7 @@ usage()
            "    -d --device\t\t Use this capture device instead of default\n"
            "    -I --input\t\t Read captured data from pcap file\n"
            "    -O --output\t\t Write captured data to pcap file\n"
+           "    -B --buffer\t\t Set pcap buffer size in MB (default: 2)\n"
            "    -c --calls\t\t Only display dialogs starting with INVITE\n"
            "    -r --rtp\t\t Capture RTP packets payload\n"
            "    -l --limit\t\t Set capture limit to N dialogs\n"
@@ -79,6 +80,7 @@ usage()
 #ifdef USE_EEP
            "    -H --eep-send\t Homer sipcapture url (udp:X.X.X.X:XXXX)\n"
            "    -L --eep-listen\t Listen for encapsulated packets (udp:X.X.X.X:XXXX)\n"
+           "    -E --eep-parse\t Enable EEP parsing in captured packets\n"
 #endif
 #if defined(WITH_GNUTLS) || defined(WITH_OPENSSL)
            "    -k --keyfile\t RSA private keyfile to decrypt captured packets\n"
@@ -125,7 +127,7 @@ version()
 int
 main(int argc, char* argv[])
 {
-    int opt, idx, limit, only_calls, no_incomplete, i;
+    int opt, idx, limit, only_calls, no_incomplete, pcap_buffer_size, i;
     const char *device, *outfile;
     char bpf[512];
 #if defined(WITH_GNUTLS) || defined(WITH_OPENSSL)
@@ -136,6 +138,7 @@ main(int argc, char* argv[])
     int no_interface = 0, quiet = 0, rtp_capture = 0, rotate = 0, no_config = 0;
     vector_t *infiles = vector_create(0, 1);
     vector_t *indevices = vector_create(0, 1);
+    char *token;
 
     // Program options
     static struct option long_options[] = {
@@ -144,6 +147,7 @@ main(int argc, char* argv[])
         { "device", required_argument, 0, 'd' },
         { "input", required_argument, 0, 'I' },
         { "output", required_argument, 0, 'O' },
+        { "buffer", required_argument, 0, 'B' },
 #if defined(WITH_GNUTLS) || defined(WITH_OPENSSL)
         { "keyfile", required_argument, 0, 'k' },
 #endif
@@ -160,13 +164,14 @@ main(int argc, char* argv[])
 #ifdef USE_EEP
         { "eep-listen", required_argument, 0, 'L' },
         { "eep-send", required_argument, 0, 'H' },
+        { "eep-parse", required_argument, 0, 'E' },
 #endif
         { "quiet", no_argument, 0, 'q' },
     };
 
     // Parse command line arguments that have high priority
     opterr = 0;
-    char *options = "hVd:I:O:pqtW:k:crl:ivNqDL:H:Rf:F";
+    char *options = "hVd:I:O:B:pqtW:k:crl:ivNqDL:H:ERf:F";
     while ((opt = getopt_long(argc, argv, options, long_options, &idx)) != -1) {
         switch (opt) {
             case 'h':
@@ -189,6 +194,7 @@ main(int argc, char* argv[])
     // Get initial values for configurable arguments
     device = setting_get_value(SETTING_CAPTURE_DEVICE);
     outfile = setting_get_value(SETTING_CAPTURE_OUTFILE);
+    pcap_buffer_size = setting_get_intvalue(SETTING_CAPTURE_BUFFER);
 #if defined(WITH_GNUTLS) || defined(WITH_OPENSSL)
     keyfile = setting_get_value(SETTING_CAPTURE_KEYFILE);
 #endif
@@ -208,13 +214,27 @@ main(int argc, char* argv[])
             case 'V': /* handled before with higher priority options */
                 break;
             case 'd':
-                vector_append(indevices, optarg);
+                token = strtok(optarg, ",");
+                while (token) {
+                    vector_append(indevices, token);
+                    token = strtok(NULL, ",");
+                }
                 break;
             case 'I':
                 vector_append(infiles, optarg);
                 break;
             case 'O':
                 outfile = optarg;
+                break;
+            case 'B':
+                if(!(pcap_buffer_size = atoi(optarg))) {
+                    fprintf(stderr, "Invalid buffer size.\n");
+                    return 0;
+                }
+                if(!(pcap_buffer_size > 0 && pcap_buffer_size <= 2048)) {
+                    fprintf(stderr, "Buffer size not in range (0 < b <= 2048).\n");
+                    return 0;
+                }
                 break;
             case 'l':
                 if(!(limit = atoi(optarg))) {
@@ -285,6 +305,14 @@ main(int argc, char* argv[])
                 fprintf(stderr, "sngrep is not compiled with HEP/EEP support.");
                 exit(1);
 #endif
+            case 'E':
+#ifdef USE_EEP
+                setting_set_value(SETTING_CAPTURE_EEP, SETTING_ON);
+                break;
+#else
+                fprintf(stderr, "sngrep is not compiled with HEP/EEP support.");
+                exit(1);
+#endif
             case '?':
                 if (strchr(options, optopt)) {
                     fprintf(stderr, "-%c option requires an argument.\n", optopt);
@@ -320,7 +348,7 @@ main(int argc, char* argv[])
     sip_init(limit, only_calls, no_incomplete);
 
     // Set capture options
-    capture_init(limit, rtp_capture, rotate);
+    capture_init(limit, rtp_capture, rotate, pcap_buffer_size);
 
 #ifdef USE_EEP
     // Initialize EEP if enabled
@@ -329,7 +357,13 @@ main(int argc, char* argv[])
 
     // If no device or files has been specified in command line, use default
     if (vector_count(indevices) == 0 && vector_count(infiles) == 0) {
-        vector_append(indevices, (char *) device);
+        token = strdup(device);
+        token = strtok(token, ",");
+        while (token) {
+            vector_append(indevices, token);
+            token = strtok(NULL, ",");
+        }
+        sng_free(token);
     }
 
     // If we have an input file, load it

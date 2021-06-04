@@ -1,9 +1,9 @@
 .\" Man page for the sngrep
 .\"
-.\" Copyright (c) 2013-2019  Ivan Alonso <kaian@irontec.com>
-.\" Copyright (c) 2013-2019  Irontec S.L.
+.\" Copyright (c) 2013-2021  Ivan Alonso <kaian@irontec.com>
+.\" Copyright (c) 2013-2021  Irontec S.L.
 
-.TH SNGREP 8 "October 2018" "sngrep 1.4.6"
+.TH SNGREP 8 "May 2021" "sngrep 1.4.9"
 
 .SH NAME
 
@@ -11,7 +11,7 @@ sngrep \- SIP Messages flow viewer
 
 .SH SYNOPSIS
 
-.B sngrep [-hVcivlkNq] [ -IO
+.B sngrep [-hVcivlkNqE] [ -IO
 .I pcap_dump
 .B ] [ -d
 .I dev
@@ -70,8 +70,12 @@ Save all captured packets to a pcap file. This option can be used
 with bpf filters.
 
 .TP
+.I -B buffer
+Change size of pcap capture buffer (default: 2MB)
+
+.TP
 .I \-d dev
-Use this capture device instead of default (\fIany\fP).
+Use this capture device instead of default (\fIany\fP). Special keyword 'any', a device name like 'eth0' or a comma separated list like 'eth1,eth3'. This overrides the settings in the configuration file.
 
 .TP
 .I -k keyfile
@@ -107,6 +111,10 @@ Argument must be an IP address and port in the format: udp:A.B.C.D:PORT
 .I -L
 Start a HEP server listening for packets
 Argument must be an IP address and port in the format: udp:A.B.C.D:PORT
+
+.TP
+.I -E
+Enable parsing of captured HEP3 packets.
 
 .TP
 .I match expression

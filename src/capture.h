@@ -48,15 +48,6 @@
 #define _BSD_SOURCE 1
 #endif
 
-/* Old versions of libpcap in OpenBSD use <net/bpf.h>
- * which actually defines timestamps as bpf_timeval instead
- * of simple timeval. This no longer happens in newest libpcap
- * versions, where header packets have timestamps in timeval
- * structs */
-#if defined (__OpenBSD__) && defined(_NET_BPF_H_)
-#define timeval bpf_timeval
-#endif
-
 #if defined(BSD) || defined (__OpenBSD__) || defined(__FreeBSD__)
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -128,6 +119,8 @@ typedef struct capture_info capture_info_t;
 struct capture_config {
     //! Calls capture limit. 0 for disabling
     size_t limit;
+    //! Set size of pcap buffer
+    size_t pcap_buffer_size;
     //! Also capture RTP packets
     bool rtp_capture;
     //! Rotate capturad dialogs when limit have reached
@@ -189,9 +182,10 @@ struct capture_info
  * @param limit Numbers of calls >0
  * @param rtp_catpure Enable rtp capture
  * @param rotate Enable capture rotation
+ * @param set size of pcap buffer
  */
 void
-capture_init(size_t limit, bool rtp_capture, bool rotate);
+capture_init(size_t limit, bool rtp_capture, bool rotate, size_t pcap_buffer_size);
 
 /**
  * @brief Deinitialize capture data

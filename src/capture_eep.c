@@ -444,7 +444,7 @@ capture_eep_send_v3(packet_t *pkt)
     /* IPv6 */
     else if(pkt->ip_version == 6) {
         /* SRC IPv6 */
-        memcpy((void*) buffer+buflen, &src_ip4, sizeof(struct hep_chunk_ip6));
+        memcpy((void*) buffer+buflen, &src_ip6, sizeof(struct hep_chunk_ip6));
         buflen += sizeof(struct hep_chunk_ip6);
 
         memcpy((void*) buffer+buflen, &dst_ip6, sizeof(struct hep_chunk_ip6));
@@ -488,7 +488,7 @@ capture_eep_receive()
         case 2:
             return capture_eep_receive_v2();
         case 3:
-            return capture_eep_receive_v3();
+            return capture_eep_receive_v3(NULL, 0);
     }
     return NULL;
 }
@@ -600,7 +600,7 @@ capture_eep_receive_v2()
  * @return packet pointer
  */
 packet_t *
-capture_eep_receive_v3()
+capture_eep_receive_v3(const u_char *pkt, uint32_t size)
 {
 
     struct hep_generic hg;
@@ -610,7 +610,6 @@ capture_eep_receive_v3()
 #endif
     hep_chunk_t payload_chunk;
     hep_chunk_t authkey_chunk;
-    hep_chunk_t uuid_chunk;
     char password[100];
     int password_len;
     unsigned char *payload = 0;
@@ -624,11 +623,15 @@ capture_eep_receive_v3()
     //! Packet header
     struct pcap_pkthdr header;
     //! New created packet pointer
-    packet_t *pkt;
+    packet_t *pkt_new;
 
-    /* Receive EEP generic header */
-    if (recvfrom(eep_cfg.server_sock, buffer, MAX_CAPTURE_LEN, 0, &eep_client, &eep_client_len) == -1)
-        return NULL;
+    if(!pkt) {
+        /* Receive EEP generic header */
+        if (recvfrom(eep_cfg.server_sock, buffer, MAX_CAPTURE_LEN, 0, &eep_client, &eep_client_len) == -1)
+            return NULL;
+    } else {
+        memcpy(&buffer, pkt, size);
+    }
 
     // Initialize structs
     memset(&hg, 0, sizeof(hep_generic_t));
@@ -748,28 +751,27 @@ capture_eep_receive_v3()
     }
 
     // Create a new packet
-    pkt = packet_create((hg.ip_family.data == AF_INET)?4:6, hg.ip_proto.data, src, dst, 0);
-    packet_add_frame(pkt, &header, payload);
-    packet_set_type(pkt, PACKET_SIP_UDP);
-    packet_set_payload(pkt, payload, header.caplen);
+    pkt_new = packet_create((hg.ip_family.data == AF_INET)?4:6, hg.ip_proto.data, src, dst, 0);
+    packet_add_frame(pkt_new, &header, payload);
+    packet_set_type(pkt_new, PACKET_SIP_UDP);
+    packet_set_payload(pkt_new, payload, header.caplen);
 
     /* FREE */
     sng_free(payload);
-    return pkt;
+    return pkt_new;
 }
 
 int
 capture_eep_set_server_url(const char *url)
 {
     char urlstr[256];
-    char address[256], port[256];
+    char address[ADDRESSLEN + 1], port[6];
 
-    memset(urlstr, 0, sizeof(urlstr));
     memset(address, 0, sizeof(address));
     memset(port, 0, sizeof(port));
 
-    strncpy(urlstr, url, strlen(url));
-    if (sscanf(urlstr, "%*[^:]:%[^:]:%s", address, port) == 2) {
+    strncpy(urlstr, url, sizeof(urlstr));
+    if (sscanf(urlstr, "%*[^:]:%" STRINGIFY(ADDRESSLEN) "[^:]:%5s", address, port) == 2) {
         setting_set_value(SETTING_EEP_LISTEN, SETTING_ON);
         setting_set_value(SETTING_EEP_LISTEN_ADDR, address);
         setting_set_value(SETTING_EEP_LISTEN_PORT, port);
@@ -782,14 +784,13 @@ int
 capture_eep_set_client_url(const char *url)
 {
     char urlstr[256];
-    char address[256], port[256];
+    char address[ADDRESSLEN + 1], port[6];
 
-    memset(urlstr, 0, sizeof(urlstr));
     memset(address, 0, sizeof(address));
     memset(port, 0, sizeof(port));
 
-    strncpy(urlstr, url, strlen(url));
-    if (sscanf(urlstr, "%*[^:]:%[^:]:%s", address, port) == 2) {
+    strncpy(urlstr, url, sizeof(urlstr));
+    if (sscanf(urlstr, "%*[^:]:%" STRINGIFY(ADDRESSLEN) "[^:]:%5s", address, port) == 2) {
         setting_set_value(SETTING_EEP_SEND, SETTING_ON);
         setting_set_value(SETTING_EEP_SEND_ADDR, address);
         setting_set_value(SETTING_EEP_SEND_PORT, port);
